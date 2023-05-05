@@ -5,7 +5,7 @@ import openai
 import gradio as gr
 from langchain.llms import OpenAI
 from langchain.prompts import PromptTemplate
-from langchain.chains import LLMChain
+from langchain.chains import LLMChain, SequentialChain
 from langchain.utilities import WikipediaAPIWrapper
 
 
@@ -26,61 +26,83 @@ openai_llm = OpenAI()
 
 ## LANGCHAIN CONFIGURATION
 ## ---------------------------------------------------------------------------------------------------------------------
-# Setting up the prompt template for retreiving the input company's top 5 competitors
-top_5_competitors_template = PromptTemplate(
-    input_variables = ['company_name'],
-    template = 'Which 5 companies are {company_name}\'s largest competitors? Give me a numbered list with a brief summary of the competitor\'s strategic advantage.'
+# Creating a prompt template for checking to see if the inputted individual is a historical figure
+is_historical_figure_template = PromptTemplate(
+    input_variables = ['entity_name'],
+    template = 'Is the following entity a person, and if yes, would you consider this person to be a historical figure: {entity_name}. Please give me back just a yes or no answer.'
 )
 
-# Setting up the prompt template for developing five business strategies for the input company
-top_5_strategies_template = PromptTemplate(
-    input_variables = ['company_name'],
-    template = 'Give me five business strategies for {company_name} to grow their business. Provide me the answer as a bulleted list with brief explanations around each strategy. Do not provide any text before the bulleted list and do not pad with newline characters.'
+# Creating a prompt template for generating a research paper outline the three most important events in the historical figure's life
+research_paper_outline_template = PromptTemplate(
+    input_variables = ['entity_name', 'wikipedia_entry'],
+    template = 'The following is a Wikipedia entry about {entity_name}. Please provide for me an outline of a basic research paper with an introduction, the three most important events of this person\'s life, and a conclusion. Here is the Wikipedia information:\n\n {wikipedia_entry}'
 )
 
-# Setting up the prompt template for generating five specific business actions around the first strategy generated from the previous prompt template
-top_5_business_actions_template = PromptTemplate(
-    input_variables = ['business_strategies'],
-    template = 'From this list of business strategies:\n {business_strategies}\n Please develop 5 specific actions to take around the first strategy. Provide me the answer as a bulleted list with brief explanations for each action. Do not provide any text before the bulleted list and do not pad with newline characters.'
+# Creating a prompt template for generating a research paper based on the outline generated from the previous prompt template
+research_paper_template = PromptTemplate(
+    input_variables = ['entity_name', 'research_paper_outline'],
+    template = 'You are a high schooler who has just been assigned research paper about a historical figure. The historical figure is {entity_name}, and the following is an outline to follow:\n {research_paper_outline}. Please write a research paper approximately three pages in length.'
 )
 
-# Setting up the prompt template to retrieve a summary of the company history from the Wikipedia information
-company_history_template = PromptTemplate(
-    input_variables = ['wikipedia_information'],
-    template = 'Please provide me a summary of the company history from this body of Wikipedia information: {wikipedia_information}'
+# Creating a prompt template for re-writing the research paper as Jar Jar Binks
+jar_jar_template = PromptTemplate(
+    input_variables = ['research_paper'],
+    template = 'Please rewrite the following research paper in the tone of Jar Jar Binks from Star Wars:\n\n {research_paper}'
 )
 
-# Setting up the prompt template to re-write company history as Jar Jar Binks from Star Wars
-jar_jar_history_template = PromptTemplate(
-    input_variables = ['company_history'],
-    template = 'Please re-write the following summary in the voice of Jar Jar Binks from Star Wars: {company_history}. Do not add any newline characters at the beginning of your response.'
-)
-
-# Setting up the prompt template for generating a catchy jingle about the company from its Wikipedia information
-jingle_template = PromptTemplate(
-    input_variables = ['company_name', 'wikipedia_information'],
-    template = 'Please write a catchy jingle for {company_name}. Here is some additional information about the company to help you write it: {wikipedia_information}. Do not show me the word "Jingle" at the beginning nor pad the beginning of your response with newline characters.'
-)
-
-# Setting up the prompt template to generate HTML code to create a simple website for displaying the company's summary information
-html_summary_template = PromptTemplate(
-    input_variables = ['company_history'],
-    template = 'Please provide me HTML code to display a company\'s historical summary. Give me only the HTML code and nothing else. Here is the historical summary for context: {company_history}'
-)
-
-# Instantiating the LangChains for all the prompt templates defined above
-top_5_competitors_chain      = LLMChain(llm = openai_llm, prompt = top_5_competitors_template, verbose = True, output_key = 'top_5_competitors')
-top_5_strategies_chain       = LLMChain(llm = openai_llm, prompt = top_5_strategies_template, verbose = True, output_key = 'business_strategies')
-top_5_business_actions_chain = LLMChain(llm = openai_llm, prompt = top_5_business_actions_template, verbose = True, output_key = 'business_actions')
-company_history_chain        = LLMChain(llm = openai_llm, prompt = company_history_template, verbose = True, output_key = 'company_history')
-jar_jar_history_chain        = LLMChain(llm = openai_llm, prompt = jar_jar_history_template, verbose = True, output_key = 'jar_jar_history')
-jingle_chain                 = LLMChain(llm = openai_llm, prompt = jingle_template, verbose = True, output_key = 'jingle')
-html_summary_chain           = LLMChain(llm = openai_llm, prompt = html_summary_template, verbose = True, output_key = 'html_code_template')
+# Instantiating the LangChains objects for all the prompt templates defined above
+is_historical_figure_chain = LLMChain(llm = openai_llm, prompt = is_historical_figure_template, verbose = True, output_key = 'is_historical_figure')
+research_paper_outline_chain = LLMChain(llm = openai_llm, prompt = research_paper_outline_template, verbose = True, output_key = 'research_paper_outline')
+research_paper_chain = LLMChain(llm = openai_llm, prompt = research_paper_template, verbose = True, output_key = 'research_paper')
+jar_jar_chain = LLMChain(llm = openai_llm, prompt = jar_jar_template, verbose = True, output_key = 'jar_jar_paper')
 
 
 # Instantiating an object to obtain results from the Wikipedia API
 wikipedia_api = WikipediaAPIWrapper(top_k_results = 1)
 
+# Creating the LangChain chain
+research_paper_langchain = SequentialChain(chains = [research_paper_outline_chain, research_paper_chain, jar_jar_chain],
+                                           input_variables = ['entity_name', 'wikipedia_entry'],
+                                           output_variables = ['research_paper_outline', 'research_paper', 'jar_jar_paper'],
+                                           verbose = True)
+
+
+
+## HELPER FUNCTIONS
+## ---------------------------------------------------------------------------------------------------------------------
+def generate_book_report(entity_name_prompt):
+    '''
+    Generates a book report based on a provided entity name
+
+    Inputs:
+        - entity_name_prompt (str): The name of the Fortune 500 company submitted by the user
+
+    Returns:
+        - entity_name_prompt (str): The cleared out entity name ready to take in the next submission
+        - research_paper_outline (str): The outline of the research paper
+        - research_paper (str): The research paper itself
+        - jar_jar_paper (str): The research paper rewritten in the tone of Jar Jar Binks
+    '''
+
+    # Setting the name of the entity being profiled
+    entity_name = entity_name_prompt
+
+    # Retrieving information about the company from Wikipedia
+    wikipedia_entry = wikipedia_api.run(f'{entity_name} (person)')
+
+    # Passing the wikipedia entry and historical figure name into the LangChain
+    langchain_response = research_paper_langchain({'entity_name': entity_name, 'wikipedia_entry': wikipedia_entry})
+
+    # Obtaining each of the elements from the LangChain response
+    research_paper_outline = langchain_response['research_paper_outline']
+    research_paper = langchain_response['research_paper']
+    jar_jar_paper = langchain_response['jar_jar_paper']
+
+
+    # Clearing out the company name for the next run
+    entity_name_prompt = ''
+
+    return entity_name_prompt, research_paper_outline, research_paper, jar_jar_paper
 
 
 def clear_results():
@@ -88,95 +110,46 @@ def clear_results():
     Clears the results from the page
 
     Inputs:
-        - company_name (str): Name of the company
-        - top_5_competitors (str): A bulleted list of the top 5 competitors
-        - business_strategies (str): A list of the top 5 business strategies
-        - business_actions (str): A list of top 5 business actions to take against first business strategy defined
-        - company_history (str): History about the company
-        - jar_jar_history (str): History about the company in the voice of Jar Jar Binks
-        - jingle (str): A jingle written aboutt the company
-        - html_summary_code (str): Code written about the summary to be displayed in HTML
+        - research_paper_outline (str): The outline of the research paper
+        - research_paper (str): The research paper itself
+        - jar_jar_paper (str): The research paper rewritten in the tone of Jar Jar Binks
 
     Returns:
-        - company_name (str): Cleared out field ready for next company
-        - top_5_competitors (str): Cleared out field ready for next company
-        - business_strategies (str): Cleared out field ready for next company
-        - business_actions (str): Cleared out field ready for next company
-        - company_history (str): Cleared out field ready for next company
-        - jar_jar_history (str): Cleared out field ready for next company
-        - jingle (str): Cleared out field ready for next company
-        - html_summary_code (str): Cleared out field ready for next company
+        - research_paper_outline (str): Cleared out field ready for next entry
+        - research_paper (str): Cleared out field ready for next entry
+        - jar_jar_paper (str): Cleared out field ready for next entry
     '''
 
     # Clearing out the results for each field
-    company_name = ''
-    top_5_competitors = ''
-    business_strategies = ''
-    business_actions = ''
-    company_history = ''
-    jar_jar_history = ''
-    jingle = ''
-    html_summary_code = ''
+    research_paper_outline = ''
+    research_paper = ''
+    jar_jar_paper = ''
 
-    return company_name, top_5_competitors, business_strategies, business_actions, company_history, jar_jar_history, jingle, html_summary_code
-
-
-
-## HELPER FUNCTIONS
-## ---------------------------------------------------------------------------------------------------------------------
-def generate_business_profile(company_name_prompt):
-    '''
-    Generates the business profile for the inputted Fortune 500 company
-
-    Inputs:
-        - company_name_prompt (str): The name of the Fortune 500 company submitted by the user
-
-    Returns:
-        - company_name_prompt (str): The cleared out company name ready to take in the next submission
-    '''
-
-    # Setting the name of the company being profiled
-    company_name = company_name_prompt
-
-    # Retrieving information about the company from Wikipedia
-    wikipedia_information = wikipedia_api.run(f'{company_name_prompt} (company)')
-
-    # Retrieving the list of top 5 competitors from OpenAI
-    top_5_competitors = top_5_competitors_chain.run(company_name_prompt)
-
-    # Retrieving the top 5 strategies for the business from OpenAI
-    business_strategies = top_5_strategies_chain.run(company_name_prompt)
-
-    # Retrieving the top 5 business actions per the strategies derived by OpenAI in the previous step
-    business_actions = top_5_business_actions_chain.run(business_strategies)
-    business_actions = f'For the first strategy listed in the previous box, here are five specific business actions to take to further that strategy:{business_actions}'
-
-    # Retrieving a summary of the company using the Wikipedia information
-    company_history = company_history_chain.run(company_name = company_name_prompt, wikipedia_information = wikipedia_information)
-
-    # Retrieving a re-written version of the company history as Jar Jar Binks
-    jar_jar_history = jar_jar_history_chain.run(company_history)
-
-    # Retrieving the jingle written by OpenAI using wikipedia information
-    jingle = jingle_chain.run(company_name = company_name_prompt, wikipedia_information = wikipedia_information)
-
-    # Retrieving an HTML code template to display the company history
-    html_summary_code = html_summary_chain.run(jar_jar_history)
-
-    # Clearing out the company name for the next run
-    company_name_prompt = ''
-
-    return company_name_prompt, company_name, top_5_competitors, business_strategies, business_actions, company_history, jar_jar_history, jingle, html_summary_code
-
+    return research_paper_outline, research_paper, jar_jar_paper
 
 
 
 ## GRADIO UI LAYOUT & FUNCTIONALITY
 ## ---------------------------------------------------------------------------------------------------------------------
 # Defining the building blocks that represent the form and function of the Gradio UI
-with gr.Blocks(title = 'Book Report Generator', theme = 'base') as business_profiler:
+with gr.Blocks(title = 'Book Report Generator', theme = 'base') as book_report_generator:
 
-    pass
+    title_markdown = gr.Markdown('# Book Report Generator')
+    entity_name_prompt = gr.Textbox(label = 'Historical person to profile:', placeholder = 'Please enter the name of the historical entity.')
+    research_paper_outline = gr.Textbox(label = 'Book Report Outline', interactive = False)
+    research_paper = gr.Textbox(label = 'Book Report', interactive = False)
+    jar_jar_paper = gr.Textbox(label = 'Book Report (as Jar Jar Binks)', interactive = False)
+
+    # Creating a button to clear the results
+    clear_results_button = gr.Button('Clear Results')
+
+    # Defining the behavior for what occurs when the user hits "Enter" after typing a prompt
+    entity_name_prompt.submit(fn = generate_book_report,
+                              inputs = [entity_name_prompt],
+                              outputs = [entity_name_prompt, research_paper_outline, research_paper, jar_jar_paper])
+    
+    # Clearing out all results when the appropriate button is clicked
+    clear_results_button.click(fn = clear_results, inputs = None, outputs = [research_paper_outline, research_paper, jar_jar_paper])
     
 
 
@@ -186,4 +159,4 @@ with gr.Blocks(title = 'Book Report Generator', theme = 'base') as business_prof
 if __name__ == "__main__":
 
     # Launching the Gradio interface
-    business_profiler.launch()
+    book_report_generator.launch()
