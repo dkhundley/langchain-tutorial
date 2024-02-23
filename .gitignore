@@ -469,7 +469,7 @@ catboost_info/
 
 # Key Configurations Directory (added by dkhundley)
 keys/
-sensitive
+sensitive/
 
 # SageMaker Test Direrectory Ignores (added by dkhundley)
 tests/sagemaker_test_dir/input/train/data/
